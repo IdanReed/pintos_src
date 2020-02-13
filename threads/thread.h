@@ -109,7 +109,7 @@ extern bool thread_mlfqs;
 
 void thread_init (void);
 void thread_start (void);
-
+void thread_ready_queue_init (void);
 void thread_tick (void);
 void thread_print_stats (void);
 
@@ -138,4 +138,5 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+struct list * thread_get_plist(struct thread *t);
 #endif /* threads/thread.h */

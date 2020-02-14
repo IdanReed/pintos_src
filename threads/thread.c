@@ -23,7 +23,8 @@
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
-static struct list ready_list;
+//static struct list ready_list;
+static struct list (*ready_queue)[PRI_MAX - PRI_MIN + 1];
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -71,6 +72,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static int highest_ready_priority (void);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -91,7 +93,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  list_init (&ready_list);
+  //list_init (&ready_list);
   list_init (&all_list);
 
   /* Set up a thread structure for the running thread. */
@@ -101,6 +103,17 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 }
 
+void
+thread_ready_queue_init (void)
+{
+  int cur_pri;
+  ready_queue = palloc_get_page(PAL_ZERO);
+  
+  for (cur_pri = PRI_MIN; cur_pri <= PRI_MAX; cur_pri++)
+  {
+    list_init (&(*ready_queue)[cur_pri]); 
+  }
+}
 /* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
 void
@@ -238,11 +251,18 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  //list_push_back (&ready_list, &t->elem);
+  list_push_back (thread_get_plist(t), &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
 
+/* Gets the list for a threads priority level */
+struct list *
+thread_get_plist(struct thread *t)
+{
+ return &(*ready_queue)[t->priority];
+}
 /* Returns the name of the running thread. */
 const char *
 thread_name (void) 
@@ -309,7 +329,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    //list_push_back (&ready_list, &cur->elem);
+    list_push_back (thread_get_plist(cur), &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -336,7 +357,13 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  
   thread_current ()->priority = new_priority;
+
+  if (new_priority < highest_ready_priority())
+  {
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -376,7 +403,7 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return 0;
 }
-
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -491,10 +518,43 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
+  /*
   if (list_empty (&ready_list))
     return idle_thread;
   else
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  */
+  int pri_max = highest_ready_priority();
+
+  if(pri_max >= PRI_MIN)
+  {
+    return (list_entry (
+      list_pop_front(&(*ready_queue)[pri_max]),
+      struct thread,
+      elem
+    ));
+  }
+  else
+  {
+    return idle_thread;
+  }
+}
+
+/*  Finds the highest priority level of the ready threads. */
+
+static int 
+highest_ready_priority (void)
+{
+  int pri_cur;
+
+  for (pri_cur = PRI_MAX; pri_cur >= PRI_MIN; pri_cur--)
+  {
+    if (!list_empty (&(*ready_queue)[pri_cur]))
+    {
+      break;
+    }
+  }
+  return pri_cur;
 }
 
 /* Completes a thread switch by activating the new thread's page

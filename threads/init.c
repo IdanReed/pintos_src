@@ -91,6 +91,7 @@ main (void)
   console_init ();  
 
   /* Greet user. */
+  printf ("TEST: %d", init_ram_pages);
   printf ("Pintos booting with %'"PRIu32" kB RAM...\n",
           init_ram_pages * PGSIZE / 1024);
 
@@ -98,6 +99,8 @@ main (void)
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
+  
+  thread_ready_queue_init();
 
   /* Segmentation. */
 #ifdef USERPROG

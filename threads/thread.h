@@ -87,7 +87,8 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
+    int fallback_priority;		/* Fallback Priority (no donators)*/
+    int priority;                       /* Priority. (Actual, after donators) */ 
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -99,6 +100,8 @@ struct thread
 #endif
 
     /* Owned by thread.c. */
+    struct list donations;
+    struct list_elem donationelem;	/* List element in a donation list. */
     unsigned magic;                     /* Detects stack overflow. */
   };
 
@@ -132,6 +135,7 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_calculate_priority (struct thread *t);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
@@ -139,4 +143,8 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 struct list * thread_get_plist(struct thread *t);
+
+void thread_add_donator(struct thread *t);
+void thread_remove_donator(void);
+
 #endif /* threads/thread.h */

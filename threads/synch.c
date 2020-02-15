@@ -206,34 +206,15 @@ lock_acquire (struct lock *lock)
   // Otherwise we wait like normal.
   // Will probably want to use sema_try_down so that we can handle a failure
 
-  //sema_down (&lock->semaphore);
-
-  // Attempt to acquire the semaphore
-  current_priority = thread_get_priority();
-  success = sema_try_down(&lock->semaphore)
-  if (!success) {
-    // First record old priority
-    previous_priority = lock->holder->priority;
-
-    // We failed to aquire the lock. Check if priority donation can be done
-    if(current_priority > lock->holder->priority){
-      // Do priority donation
-      // TODO: I think we need a way of changing the priority of the holder thread to where 
-      // it actually effects our priority queue
-      lock->holder->priority = current_priority;
-    }
-    // No matter what, we now want to wait on the semaphore
-    // This should do the thread switch and our lower priority thread should be switched to.
-    sema_down(&lock->semaphore)
-    // After lock can be acquired, reset priority
-    // TODO: Might need a check here to see if its a good idea to change the priority
-    // Might be an edge case where this won't work correctly with the timing.
-    // This also might not be the way to return the priority. Because it wouldn't actually update
-    // in our priority queue. Might need to do this in the lock_release method.
-    lock->holder->priority = previous_priority;
+  if (lock->holder != NULL) {
+    // Add as donator.
+    thread_add_donator(lock->holder);
+    // Recalculate it's priority
+    thread_calculate_priority(lock->holder);
   }
+  
+  sema_down(&lock->semaphore);
 
-  // TODO: We succeeded acquiring the lock. 
   lock->holder = thread_current ();
 }
 

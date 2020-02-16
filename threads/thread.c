@@ -294,7 +294,7 @@ elem_priority_comparison( struct list_elem *a, struct list_elem *b, void *aux)
   return t1-> priority < t2->priority;
 }
 
-static void 
+void 
 thread_add_donator(struct thread *t)
 {
   list_insert_ordered( 
@@ -310,9 +310,14 @@ thread_donate_priority(void)
   struct thread * tc;
   struct lock * lock_current;
   int depth;
+  enum intr_level old_level;
+  
+
+  old_level = intr_disable ();
 
   tc = thread_current();
   lock_current = tc->waiting_on;
+  depth = 0;
 
   while (lock_current != NULL && depth < MAX_DONATE_DEPTH)
   {
@@ -323,18 +328,16 @@ thread_donate_priority(void)
     if(lock_current->holder->priority >= tc->priority)
       break;
 
-    // Otherwise we need to add current thread as donator
-    //printf("%s donating to %s\n", tc->name, lock_current->holder->name);
-    thread_add_donator(lock_current->holder);
-
-    // Recalculate priority
-    thread_calculate_priority(lock_current->holder);
+    // Otherwise we need to donate our priority
+    lock_current->holder->priority = tc->priority;
 
     // Move the current lock to the holders lock. 
     // This allows us to donate down the chain
     lock_current = lock_current->holder->waiting_on;
     
   }
+
+  intr_set_level(old_level);
 
 }
 

@@ -222,6 +222,8 @@ lock_acquire (struct lock *lock)
 
   if (lock->holder != NULL) {
     thread_current()->waiting_on = lock;
+
+    thread_add_donator(lock->holder);
   }
   
   sema_down(&lock->semaphore);

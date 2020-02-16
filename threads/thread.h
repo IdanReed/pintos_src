@@ -146,8 +146,7 @@ int thread_get_load_avg (void);
 
 struct list * thread_get_plist(struct thread *t);
 
-void thread_add_donator(struct thread *t);
-void thread_remove_donator(void);
+void thread_donate_priority(void);
 
 bool donate_priority_comparison(struct list_elem * a, struct list_elem * b, void * aux);
 bool elem_priority_comparison(struct list_elem * a, struct list_elem * b, void * aux);

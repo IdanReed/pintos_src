@@ -21,6 +21,8 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+#define MAX_DONATE_DEPTH 8
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 //static struct list ready_list;
@@ -292,7 +294,7 @@ elem_priority_comparison( struct list_elem *a, struct list_elem *b, void *aux)
   return t1-> priority < t2->priority;
 }
 
-void 
+static void 
 thread_add_donator(struct thread *t)
 {
   list_insert_ordered( 
@@ -303,9 +305,37 @@ thread_add_donator(struct thread *t)
 }
 
 void 
-thread_remove_donator(void)
+thread_donate_priority(void)
 {
-  list_remove(&thread_current()->donationelem);
+  struct thread * tc;
+  struct lock * lock_current;
+  int depth;
+
+  tc = thread_current();
+  lock_current = tc->waiting_on;
+
+  while (lock_current != NULL && depth < MAX_DONATE_DEPTH)
+  {
+    // Increase the depth one step
+    depth++;
+
+    // Check to see if we can exit the search
+    if(lock_current->holder->priority >= tc->priority)
+      break;
+
+    // Otherwise we need to add current thread as donator
+    //printf("%s donating to %s\n", tc->name, lock_current->holder->name);
+    thread_add_donator(lock_current->holder);
+
+    // Recalculate priority
+    thread_calculate_priority(lock_current->holder);
+
+    // Move the current lock to the holders lock. 
+    // This allows us to donate down the chain
+    lock_current = lock_current->holder->waiting_on;
+    
+  }
+
 }
 
 void
@@ -445,7 +475,6 @@ thread_calculate_priority (struct thread *t)
   //printf("--Finished calc\n");
   intr_set_level (old_level);
 
-  thread_yield_if_not_highest();
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -461,6 +490,7 @@ thread_set_priority (int new_priority)
 
   thread_calculate_priority(tc);
 
+  thread_yield_if_not_highest();
 }
 
 /* Returns the current thread's priority. */
@@ -590,6 +620,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->fallback_priority = priority;
   t->magic = THREAD_MAGIC;
   list_init(&t->donations);
+  t->waiting_on = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

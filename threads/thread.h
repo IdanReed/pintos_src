@@ -90,6 +90,7 @@ struct thread
     int fallback_priority;		/* Fallback Priority (no donators)*/
     int priority;                       /* Priority. (Actual, after donators) */ 
     struct list_elem allelem;           /* List element for all threads list. */
+    struct lock *waiting_on;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -128,6 +129,7 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+void thread_yield_if_not_highest (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
@@ -146,5 +148,10 @@ struct list * thread_get_plist(struct thread *t);
 
 void thread_add_donator(struct thread *t);
 void thread_remove_donator(void);
+
+bool donate_priority_comparison(struct list_elem * a, struct list_elem * b, void * aux);
+bool elem_priority_comparison(struct list_elem * a, struct list_elem * b, void * aux);
+
+int highest_ready_priority(void);
 
 #endif /* threads/thread.h */

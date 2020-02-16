@@ -72,7 +72,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-static int highest_ready_priority (void);
+int highest_ready_priority (void);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -95,6 +95,7 @@ thread_init (void)
   lock_init (&tid_lock);
   //list_init (&ready_list);
   list_init (&all_list);
+  ready_queue = NULL;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -221,8 +222,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  if( priority > thread_current()->priority )
-    thread_yield(); 
+  thread_yield_if_not_highest();
 
   return tid;
 }
@@ -274,11 +274,20 @@ thread_get_plist(struct thread *t)
  return &(*ready_queue)[t->priority];
 }
 
-static bool 
-priority_comparison( struct list_elem *a, struct list_elem *b, void *aux)
+bool 
+donate_priority_comparison( struct list_elem *a, struct list_elem *b, void *aux)
 {
   struct thread * t1 = list_entry(a, struct thread, donationelem);
   struct thread * t2 = list_entry(b, struct thread, donationelem);
+
+  return t1-> priority < t2->priority;
+}
+
+bool 
+elem_priority_comparison( struct list_elem *a, struct list_elem *b, void *aux)
+{
+  struct thread * t1 = list_entry(a, struct thread, elem);
+  struct thread * t2 = list_entry(b, struct thread, elem);
 
   return t1-> priority < t2->priority;
 }
@@ -289,7 +298,7 @@ thread_add_donator(struct thread *t)
   list_insert_ordered( 
     &t->donations, 
     &thread_current()->donationelem, 
-    (list_less_func*) &priority_comparison,
+    (list_less_func*) &donate_priority_comparison,
     NULL);
 }
 
@@ -297,6 +306,21 @@ void
 thread_remove_donator(void)
 {
   list_remove(&thread_current()->donationelem);
+}
+
+void
+thread_yield_if_not_highest ()
+{
+  if (intr_context ())
+    return;
+
+  if (ready_queue == NULL)
+    return;
+   
+  if (thread_current()->priority < highest_ready_priority())
+  {
+    thread_yield();
+  }
 }
 
 /* Returns the name of the running thread. */
@@ -405,7 +429,7 @@ thread_calculate_priority (struct thread *t)
   if (!list_empty(&t->donations))
   {
     //printf("--donations availabile %d\n", list_size(&t->donations));
-    highest_donation = list_entry (list_front (&t->donations), struct thread, donationelem)->priority;
+    highest_donation = list_entry (list_back (&t->donations), struct thread, donationelem)->priority;
     if (highest_donation > t->priority)
       t->priority = highest_donation;
   }
@@ -420,6 +444,8 @@ thread_calculate_priority (struct thread *t)
   }
   //printf("--Finished calc\n");
   intr_set_level (old_level);
+
+  thread_yield_if_not_highest();
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -435,11 +461,6 @@ thread_set_priority (int new_priority)
 
   thread_calculate_priority(tc);
 
-  if (tc->priority < highest_ready_priority())
-  {
-    //printf("--yielding\n");
-    thread_yield();
-  }
 }
 
 /* Returns the current thread's priority. */
@@ -620,9 +641,12 @@ next_thread_to_run (void)
 
 /*  Finds the highest priority level of the ready threads. */
 
-static int 
+int 
 highest_ready_priority (void)
 {
+  if (ready_queue == NULL)
+    return PRI_MIN - 1;
+
   int pri_cur;
 
   for (pri_cur = PRI_MAX; pri_cur >= PRI_MIN; pri_cur--)

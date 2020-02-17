@@ -191,10 +191,10 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
-timer_interrupt (struct intr_frame *args UNUSED)
+timer_interrupt (struct intr_frame * i_frame)
 {
   ticks++;
   ready_timed_threads();
@@ -336,14 +336,4 @@ waitlist_thread (int64_t start_tick, int64_t delay_ticks)
   thread_block ();
   intr_set_level (old_intr_level);
 }
-
-
-
-
-
-
-
-
-
-
 

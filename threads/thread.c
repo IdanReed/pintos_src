@@ -27,7 +27,6 @@
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
-//static struct list ready_list;
 static struct list (*ready_queue)[PRI_MAX - PRI_MIN + 1];
 
 /* List of all processes.  Processes are added to this list
@@ -101,7 +100,6 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  //list_init (&ready_list);
   list_init (&all_list);
   ready_queue = NULL;
 
@@ -230,6 +228,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* Yield to newly created thread if necessary */
   thread_yield_if_not_highest();
 
   return tid;
@@ -268,7 +267,6 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  //list_push_back (&ready_list, &t->elem);
   list_push_back (thread_get_plist(t), &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -282,6 +280,7 @@ thread_get_plist(struct thread *t)
  return &(*ready_queue)[t->priority];
 }
 
+/* Compares two thread's priority using the thread.donationelem */
 bool 
 donate_priority_comparison( struct list_elem *a, struct list_elem *b, void *aux)
 {
@@ -293,6 +292,7 @@ donate_priority_comparison( struct list_elem *a, struct list_elem *b, void *aux)
   return t1-> priority < t2->priority;
 }
 
+/* Compares two thread's priority using the thread.elem */
 bool 
 elem_priority_comparison( struct list_elem *a, struct list_elem *b, void *aux)
 {
@@ -317,6 +317,11 @@ thread_add_donator(struct thread *t)
 void 
 thread_donate_priority(void)
 {
+  /* Note: This portion of code was inspired by Tianfu Yuan's 
+     implementation of priority donation.
+     https://github.com/yuan901202/pintos_2/blob/master/src/threads/thread.c 
+     */
+
   struct thread * tc;
   struct lock * lock_current;
   int depth;
@@ -334,18 +339,18 @@ thread_donate_priority(void)
 
   while (lock_current != NULL && depth < MAX_DONATE_DEPTH)
   {
-    // Increase the depth one step
+    /* Increase the depth one step */
     depth++;
 
-    // Check to see if we can exit the search
+    /* Check to see if we can exit the search */
     if(lock_current->holder->priority >= tc->priority)
       break;
   
-    // Otherwise we need to donate our priority
+    /* Otherwise we need to donate our priority */
     lock_current->holder->priority = tc->priority;
 
-    // Move the current lock to the holders lock. 
-    // This allows us to donate down the chain
+    /* Move the current lock to the holders lock. 
+       This allows us to donate down the chain */
     lock_current = lock_current->holder->waiting_on;
     
   }
@@ -435,7 +440,6 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    //list_push_back (&ready_list, &cur->elem);
     list_push_back (thread_get_plist(cur), &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
@@ -462,6 +466,10 @@ thread_foreach (thread_action_func *func, void *aux)
 void 
 thread_calculate_priority (struct thread *t)
 {
+  /* Note: This portion of code (specifically the donation handling) was 
+     inspired by Tianfu Yuan's implementation of priority donation.
+     https://github.com/yuan901202/pintos_2/blob/master/src/threads/thread.c 
+     */
 
   int old_priority;
   int highest_donation;
@@ -473,25 +481,35 @@ thread_calculate_priority (struct thread *t)
 
   old_level = intr_disable ();
 
+  /* Set the current thread's priority back to its base priority */
   old_priority = t->priority;
   t->priority = t->fallback_priority;
+
+  /* Check to see if donations are available */
   if (!list_empty(&t->donations))
   {
+    /* Make sure the donation list is sorted. The order could have 
+       changed during a set_priority() call. */
+    list_sort(&t->donations, (list_less_func*) &donate_priority_comparison, NULL);
+
+    /* Retrieve the highest priority donator's priority */
     highest_donation = list_entry (
 	list_back (&t->donations), 
 	struct thread, 
 	donationelem)
       ->priority;
 
+    /* Assign that priority to the current thread if greater than current */
     if (highest_donation > t->priority)
       t->priority = highest_donation;
   }
 
   if (t->status == THREAD_READY && old_priority != t->priority)
   {
+    /* Update current thread's position in ready queue if the priority
+       was modified and it is in the ready queue */
     thread_update_priority_position (t);
   }
-  //printf("--Finished calc\n");
   intr_set_level (old_level);
 
 }
@@ -501,11 +519,9 @@ thread_update_priority_position(struct thread *t)
 {
   ASSERT(t->status == THREAD_READY);
 
-  //printf("need to move\n");
   list_remove(&t->elem);
 
   list_push_front(thread_get_plist(t), &t->elem);
-  //printf("new highest %d", highest_ready_priority());
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -515,15 +531,17 @@ thread_set_priority (int new_priority)
   if (thread_mlfqs)
     return;
 
-  //printf("--setting\n");
   struct thread * tc;
 
   tc = thread_current();
   
+  /* Set the threads base priority to the incomming one */
   tc->fallback_priority = new_priority;
 
+  /* Calculate the new priority (takes into account the donators) */
   thread_calculate_priority(tc);
 
+  /* Yield thread if no longer the highest priority */
   thread_yield_if_not_highest();
 }
 

@@ -20,6 +20,10 @@ Austin Smith  <austin96@ksu.edu>
 >> preparing your submission, other than the Pintos documentation,
 >> course text, lecture notes, and course staff.
 
+A few pieces of our priority donation implementation were inspired
+by Tianfu Yuan's implementation found here:
+https://github.com/yuan901202/pintos_2/
+
 
                  ALARM CLOCK
                  ===========
@@ -74,6 +78,35 @@ We then re-enable interrupts.
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+struct thread
+  {
+    ...
+    
+    int fallback_priority;		/* Fallback Priority (no donators)*/
+    ... 
+    /* Priority donation data */
+    struct list donations;		/* List of all priority donators */
+    struct list_elem donationelem;	/* List element in a donation list. */
+    struct lock *waiting_on;		/* The lock this thread is waiting on */
+    ...
+  }
+
+  fallback_priority:
+  	Is used to determine the base priority before donations are factored in
+  donations:
+  	A list of all priority donations recieved. Used to calculate the 
+	priority in the ready_queue.
+  donationelem:
+  	Used as the list element in the donations list.
+  waiting_on:
+  	The lock that a thread is waiting on. Used when traversing the
+	donation chain. e.g. lock->holder, holder->waiting_on, lock->holder, etc.
+
+static struct list (*ready_queue)[PRI_MAX - PRI_MIN + 1];
+  This is the new implementation of the ready_list. It's an array of 
+  all the available priorities, with a list of threads in each cell. 
+  Makes looking up a priority list constant time and makes moving 
+  priorities very quick.
 
 >> B2: Explain the data structure used to track priority donation.
 

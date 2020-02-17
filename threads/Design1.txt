@@ -33,19 +33,28 @@ https://github.com/yuan901202/pintos_2/
 >> A1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
-? IDAN ?
 
+struct timed_thread
+  {
+    struct list_elem elem;
+    struct thread * waiting_thread;
+    int64_t ready_tick;
+  };
+
+static struct list timed_thread_list;
+  The timed_thread struct and timed_thread_list holds all the data neccessary for a waiting a thread. 
+  All we need is the waiting thread and the tick it needs to be woken on.
 
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to your timer_sleep(),
 >> including the effects of the timer interrupt handler.
-? IDAN ?
+timer_sleep calls waitlist_thread with the current tick and tick delay which then adds a timed_thread to the list (storing when to wake and the current thread) and then blocks itself.
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
-By having the linked list ordered by closest awake time, we only need to check until we hit the first 
-waiting but not ready to wake up thread rather than searching the entire list. Most of the time, we're only checking the first thread.
+By having the linked list ordered by closest awake time, we only need to check until we hit the first thread that is 
+waiting but is not yet ready to be woken rather. This is so we don't have to search the entire list and most of the time, we're only checking the first thread.
 
 
 ---- SYNCHRONIZATION ----

@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/interrupt.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -87,23 +88,30 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
+    
     int fallback_priority;		/* Fallback Priority (no donators)*/
     int priority;                       /* Priority. (Actual, after donators) */ 
+    int nice;				/* Set by threads when using the MLFQ 
+					   scheduler */
+
+    int recent_cpu;			
+    struct list_elem elem;              /* List element used in ready_list or 
+					   ready_queue. */
+
     struct list_elem allelem;           /* List element for all threads list. */
-    struct lock *waiting_on;
-
-    /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */
-
-#ifdef USERPROG
-    /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
-#endif
-
-    /* Owned by thread.c. */
+     
+    /* Priority donation data */
     struct list donations;
     struct list_elem donationelem;	/* List element in a donation list. */
-    unsigned magic;                     /* Detects stack overflow. */
+    struct lock *waiting_on;
+
+  #ifdef USERPROG
+    /* Owned by userprog/process.c. */
+    uint32_t *pagedir;                  /* Page directory. */
+  #endif
+
+    /* Owned by thread.c. */
+       unsigned magic;                	/* Detects stack overflow. */
   };
 
 /* If false (default), use round-robin scheduler.
@@ -144,14 +152,21 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+void thread_update_all_recent_cpu (void);
+void thread_update_load_avg (void);
+void thread_update_priority (struct thread *t);
+void thread_update_all_priority (void);
+
 struct list * thread_get_plist(struct thread *t);
 
-void thread_add_donator(struct thread *t);
-void thread_donate_priority(void);
+void thread_add_donator (struct thread *t);
+void thread_donate_priority (void);
 
-bool donate_priority_comparison(struct list_elem * a, struct list_elem * b, void * aux);
-bool elem_priority_comparison(struct list_elem * a, struct list_elem * b, void * aux);
+bool donate_priority_comparison (struct list_elem * a, struct list_elem * b, void * aux);
+bool elem_priority_comparison (struct list_elem * a, struct list_elem * b, void * aux);
 
-int highest_ready_priority(void);
+int highest_ready_priority (void);
 
+struct thread * thread_current_from_intr (struct intr_frame * i_frame); 
+    
 #endif /* threads/thread.h */

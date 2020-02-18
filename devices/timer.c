@@ -196,8 +196,22 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame * i_frame)
 {
-  ticks++;
+  ticks++; 
   ready_timed_threads();
+  thread_tick_recent_cpu();
+  
+  if ((ticks % 4) == 0)
+  {
+    printf("fourth\n");
+    thread_update_all_priority();
+  }
+  if ((ticks % TIMER_FREQ) == 0)
+  {
+    printf("Sec\n");
+    thread_update_load_avg();
+    thread_update_all_recent_cpu();
+  }
+
   thread_tick ();
 }
 

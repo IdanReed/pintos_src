@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "lib/fixedpoint.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -94,7 +95,7 @@ struct thread
     int nice;				/* Set by threads when using the MLFQ 
 					   scheduler */
 
-    int recent_cpu;			
+    fp32 recent_cpu;			
     struct list_elem elem;              /* List element used in ready_list or 
 					   ready_queue. */
 
@@ -166,6 +167,7 @@ bool donate_priority_comparison (struct list_elem * a, struct list_elem * b, voi
 bool elem_priority_comparison (struct list_elem * a, struct list_elem * b, void * aux);
 
 int highest_ready_priority (void);
+void thread_tick_recent_cpu (void);
 
 struct thread * thread_current_from_intr (struct intr_frame * i_frame); 
     

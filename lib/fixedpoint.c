@@ -8,19 +8,19 @@
 int32_t f32 = 1 << Q32;
 
 fp32
-fp_f32_to_int (int n)
+fp_int_to_fp32 (int n)
 {
   return n * f32;
 }
 
 int
-fp_fp32_to_int_rzero (fp32 x)
+fp_fp32_to_int_rnd_zero (fp32 x)
 {
   return x / f32;
 }
 
 int
-fp_fp32_to_int_nearest (fp32 x)
+fp_fp32_to_int_rnd_nearest (fp32 x)
 {
   if (x >= 0)
   {

@@ -122,10 +122,14 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters))
   {
-    /* Need to sort the waiters list every time because setting the priority could
-       make this list unordered. Need to unblock the highest priority
+    /* Need to sort the waiters list every time because setting the priority
+       could make this list unordered. Need to unblock the highest priority
        thread first. */
-    list_sort(&sema->waiters, (list_less_func*) &elem_priority_comparison, NULL);
+    list_sort (
+	&sema->waiters, 
+	(list_less_func*) &elem_priority_comparison, 
+	NULL
+    );
 
     /* Unblock the last waiter (highest priority) */
     thread_unblock (list_entry (list_pop_back (&sema->waiters),
@@ -381,7 +385,12 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   if (!list_empty (&cond->waiters)) {
     /* Make sure the waiters list is sorted so that we grab the highset
        priority element */
-    list_sort(&cond->waiters, (list_less_func*) &sema_elem_priority_comparison, NULL);
+    list_sort (
+	&cond->waiters, 
+	(list_less_func*) &sema_elem_priority_comparison, 
+	NULL
+    );
+    
     sema_up (&list_entry (list_pop_back (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
   }
@@ -403,11 +412,15 @@ cond_broadcast (struct condition *cond, struct lock *lock)
     cond_signal (cond, lock);
 }
 
-/* Compares two semaphore_elem's priority. Used to sort the condvar.waiters list.
+/* Compares two semaphore_elem's priority. Used to sort the condvar.waiters
    The comparison compares the highest priority elements in the 
    semaphore_elem's semaphore.waiters list */
 static bool
-sema_elem_priority_comparison(struct list_elem *a, struct list_elem *b, void * aux )
+sema_elem_priority_comparison (
+    struct list_elem *a, 
+    struct list_elem *b, 
+    void * aux UNUSED 
+  )
 {
   struct semaphore_elem * sa = list_entry(a, struct semaphore_elem, elem);
   struct semaphore_elem * sb = list_entry(b, struct semaphore_elem, elem);
@@ -419,8 +432,17 @@ sema_elem_priority_comparison(struct list_elem *a, struct list_elem *b, void * a
     return false;
 
   /* Make sure the semaphore waiters lists are sorted */
-  list_sort(&sa->semaphore.waiters, (list_less_func*) &elem_priority_comparison, NULL);
-  list_sort(&sb->semaphore.waiters, (list_less_func*) &elem_priority_comparison, NULL);
+  list_sort (
+      &sa->semaphore.waiters, 
+      (list_less_func*) &elem_priority_comparison, 
+      NULL
+  );
+  
+  list_sort (
+      &sb->semaphore.waiters, 
+      (list_less_func*) &elem_priority_comparison, 
+      NULL
+  );
 
   /* Grab the highest priority waiter from the semaphore */
   struct thread * ta = list_entry(

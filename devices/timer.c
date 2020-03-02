@@ -194,7 +194,7 @@ timer_print_stats (void)
 
 /* Timer interrupt handler. */
 static void
-timer_interrupt (struct intr_frame * i_frame)
+timer_interrupt (struct intr_frame * i_frame UNUSED)
 {
   ticks++;
   ready_timed_threads();

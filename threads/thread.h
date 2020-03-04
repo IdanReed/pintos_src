@@ -89,15 +89,11 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     
-    int fallback_priority;		/* Fallback Priority (no donators)*/
-    int priority;                       /* Priority. (Actual, after donators) */ 
-    int nice;				/* Set by threads when using the MLFQ 
-					   scheduler */
+    int fallback_priority;		/* Fallback Priority. (no donators) */
+    int priority;                       /* Priority. (with donators) */ 
 
-    int recent_cpu;			
     struct list_elem elem;              /* List element used in ready_list or 
 					   ready_queue. */
-
     struct list_elem allelem;           /* List element for all threads list. */
      
     /* Priority donation data */
@@ -158,26 +154,31 @@ int thread_get_priority (void);
 void thread_set_priority (int);
 void thread_calculate_priority (struct thread *t);
 
-int thread_get_nice (void);
-void thread_set_nice (int);
-int thread_get_recent_cpu (void);
-int thread_get_load_avg (void);
-
-void thread_update_all_recent_cpu (void);
-void thread_update_load_avg (void);
-void thread_update_priority (struct thread *t);
-void thread_update_all_priority (void);
-
 struct list * thread_get_plist(struct thread *t);
 
 void thread_add_donator (struct thread *t);
 void thread_donate_priority (void);
 
-bool donate_priority_comparison (struct list_elem * a, struct list_elem * b, void * aux);
-bool elem_priority_comparison (struct list_elem * a, struct list_elem * b, void * aux);
+bool donate_priority_comparison (
+    struct list_elem * a, 
+    struct list_elem * b, 
+    void * aux
+);
+
+bool elem_priority_comparison (
+    struct list_elem * a, 
+    struct list_elem * b, 
+    void * aux
+);
 
 int highest_ready_priority (void);
 
 struct thread * thread_current_from_intr (struct intr_frame * i_frame); 
-    
+/* Unsupported mlqfs functions */ 
+
+void thread_set_nice (int nice);
+int thread_get_nice (void);
+int thread_get_load_avg (void);
+int thread_get_recent_cpu (void);
+
 #endif /* threads/thread.h */

@@ -78,7 +78,6 @@ void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 int highest_ready_priority (void);
 
-static void thread_update_recent_cpu (struct thread *t);
 static void thread_update_priority_position(struct thread *t);
 
 /* Initializes the threading system by transforming the code
@@ -98,6 +97,7 @@ void
 thread_init (void) 
 {
   ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (!thread_mlfqs);
 
   lock_init (&tid_lock);
   list_init (&all_list);
@@ -282,10 +282,12 @@ thread_get_plist(struct thread *t)
 
 /* Compares two thread's priority using the thread.donationelem */
 bool 
-donate_priority_comparison( struct list_elem *a, struct list_elem *b, void *aux)
+donate_priority_comparison (
+    struct list_elem *a, 
+    struct list_elem *b, 
+    void *aux UNUSED
+  )
 {
-  (void) aux;
-
   struct thread * t1 = list_entry(a, struct thread, donationelem);
   struct thread * t2 = list_entry(b, struct thread, donationelem);
 
@@ -294,10 +296,12 @@ donate_priority_comparison( struct list_elem *a, struct list_elem *b, void *aux)
 
 /* Compares two thread's priority using the thread.elem */
 bool 
-elem_priority_comparison( struct list_elem *a, struct list_elem *b, void *aux)
+elem_priority_comparison (
+    struct list_elem *a, 
+    struct list_elem *b, 
+    void *aux UNUSED
+  )
 {
-  (void) aux;
-
   struct thread * t1 = list_entry(a, struct thread, elem);
   struct thread * t2 = list_entry(b, struct thread, elem);
 
@@ -327,9 +331,6 @@ thread_donate_priority(void)
   int depth;
   enum intr_level old_level;
   
-  /* Don't donate when using MLFQS scheduler */
-  if(thread_mlfqs)
-    return;
 
   old_level = intr_disable ();
 
@@ -475,10 +476,6 @@ thread_calculate_priority (struct thread *t)
   int highest_donation;
   enum intr_level old_level;
 
-  /* Don't allow priority to be set here when using MLQFS scheduler */
-  if (thread_mlfqs)
-    return;
-
   old_level = intr_disable ();
 
   /* Set the current thread's priority back to its base priority */
@@ -528,8 +525,6 @@ thread_update_priority_position(struct thread *t)
 void
 thread_set_priority (int new_priority) 
 {
-  if (thread_mlfqs)
-    return;
 
   struct thread * tc;
 
@@ -552,95 +547,7 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
-/* Sets the current thread's nice value to NICE. */
-void
-thread_set_nice (int nice UNUSED) 
-{
 
-}
-
-/* Returns the current thread's nice value. */
-int
-thread_get_nice (void) 
-{
-  return thread_current ()->nice;
-}
-
-/* Returns 100 times the system load average. */
-int
-thread_get_load_avg (void) 
-{
-  return load_avg * 100;
-}
-
-/* Updates load_avg; Called once per sec */
-void 
-thread_update_load_avg (void)
-{
-  ASSERT(intr_context ());
-
-  uint32_t ready_threads = 0;
-  uint8_t pri_lvl;
-
-  for(pri_lvl = PRI_MIN; pri_lvl <= PRI_MAX; pri_lvl++)
-  {
-    ready_threads += list_size(ready_queue[pri_lvl]);
-  }
-
-  load_avg = ((59/60)*load_avg) + ((1/60)*ready_threads);
-}
-
-/* Returns 100 times the current thread's recent_cpu value. */
-int
-thread_get_recent_cpu (void) 
-{
- return thread_current ()->recent_cpu * 100;
-}
-
-/* Updates a single threads recent cpu value */
-static void
-thread_update_recent_cpu (struct thread * t)
-{
-  t->recent_cpu = (2*load_avg)/(2*load_avg + 1) * t->recent_cpu + t->nice;
-}
-
-/* Updates ALL threads recent_cpu value once per second*/
-void 
-thread_update_all_recent_cpu (void)
-{
-
-  uint8_t pri_lvl;
-  for(pri_lvl = PRI_MIN; pri_lvl <= PRI_MAX; pri_lvl++)
-  {
-    struct list * pri_list = ready_queue[pri_lvl];
-    struct list_elem *e;
-
-    for (e = list_begin(pri_list); e != list_end (pri_list); e = list_next (e))
-    {
-      thread_update_recent_cpu (list_entry (e, struct thread, elem));
-    }
-  }
-}
-
-/* Called on thread creation or every 4th tick */
-void 
-thread_update_priority (struct thread *t)
-{
-  t->priority = PRI_MAX - (t->recent_cpu / 4) - (t->nice * 2);
-}
-
-void 
-thread_update_all_priority (void)
-{
-
-}
-
-/* Returns the thread pointer for a given interupt frame */
-struct thread *
-thread_current_from_intr (struct intr_frame * i_frame)
-{
-  return pg_round_down (i_frame->esp);
-}
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
@@ -884,7 +791,33 @@ allocate_tid (void)
 
   return tid;
 }
-
+
+/* Unsupported mlqfs function */
+void
+thread_set_nice (int nice UNUSED)
+{
+
+}
+
+int
+thread_get_nice (void)
+{
+  return -1;
+}
+
+int
+thread_get_load_avg (void)
+{
+  return -1;
+}
+
+int
+thread_get_recent_cpu (void)
+{
+  return -1;
+}
+
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);

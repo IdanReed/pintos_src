@@ -14,13 +14,13 @@ fp_f32_to_int (int n)
 }
 
 int
-fp_fp32_to_int_rzero (fp32 x)
+fp_fp32_to_int_rnd_zero (fp32 x)
 {
   return x / f32;
 }
 
 int
-fp_fp32_to_int_nearest (fp32 x)
+fp_fp32_to_int_rnd_nearest (fp32 x)
 {
   if (x >= 0)
   {

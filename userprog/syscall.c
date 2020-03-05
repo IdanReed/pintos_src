@@ -26,6 +26,7 @@ static int syscall_tell (int fd);
 static int syscall_close (int fd);
 
 typedef int syscall_fn (uint32_t, uint32_t, uint32_t);
+static struct file_descriptor * lookup_file (uint32_t fd); 
 
 struct syscall 
 {
@@ -182,7 +183,7 @@ static int syscall_write (int fd, const void *buffer, unsigned size)
     }
     else
     {
-      partial_written_bytes = write_file (file, buf, amt_to_write);
+      //partial_written_bytes = write_file (file_to_write, buf, amt_to_write);
     }
 
     total_written_bytes += partial_written_bytes;

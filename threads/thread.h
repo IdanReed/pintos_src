@@ -101,7 +101,7 @@ struct thread
     struct list_elem donationelem;	/* List element in a donation list. */
     struct lock *waiting_on;
 
-    uint32_t current_desc               /* Current descriptor count */
+    uint32_t current_desc;               /* Current descriptor count */
     struct list file_decs;              /* List of all file descriptors */
 
   #ifdef USERPROG
@@ -119,7 +119,7 @@ struct file_descriptor
     struct list_elem elem;
     struct file * file;
     uint32_t handle;
-  }
+  };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.

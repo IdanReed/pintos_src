@@ -129,6 +129,18 @@ is_valid_mem_area (const void * src_u, size_t size)
        && pagedir_get_page (tc->pagedir, src_ + size) != NULL);
 }
 
+static bool
+is_valid_str (const char * str)
+{
+  while (*str != '\0')
+  {
+    if (!is_valid_mem_area (str, 0))
+    {
+      return false;
+    }
+  }
+  return true;
+}
 
 static void 
 copy_into_kernel (void * dst_k, const void * src_u, size_t size)
@@ -164,7 +176,8 @@ static int syscall_exec (const char *cmd_line)
 {
   tid_t tid;
 
-  // TODO: Validate filename
+  if (!is_valid_str (cmd_line))
+    thread_exit ();
   
   lock_acquire (&filesys_lock);
   tid = process_execute (cmd_line);
@@ -182,7 +195,8 @@ static int syscall_create (const char *file, unsigned initial_size)
 {
   bool res;
 
-  // TODO: Validate filename
+  if (!is_valid_str (file))
+    thread_exit ();
   
   lock_acquire (&filesys_lock);
   res = filesys_create (file, initial_size);
@@ -195,7 +209,8 @@ static int syscall_remove (const char *file)
 {
   bool res;
 
-  // TODO: Validate filename
+  if (!is_valid_str (file))
+    thread_exit ();
 
   lock_acquire (&filesys_lock);
   res = filesys_remove (file);
@@ -210,7 +225,8 @@ static int syscall_open (const char *file)
   struct file_descriptor * fd;
   struct thread * tc;
 
-  // TODO: Validate the string
+  if (!is_valid_str (file))
+    thread_exit ();
 
   tc = thread_current ();
 

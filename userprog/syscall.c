@@ -85,8 +85,6 @@ syscall_handler (struct intr_frame *f)
 
   copy_into_kernel(&call_number, (const void *) f->esp, sizeof call_number);
 
-  printf("got syscall: %d\n", call_number);
-
   /* Make sure the call number is valid */
   if (call_number > SYS_CALL_COUNT)
   {
@@ -119,14 +117,16 @@ static bool
 is_valid_mem_area (const void * src_u, size_t size)
 {
   struct thread * tc;
+  const uint8_t * src_;
 
   tc = thread_current();
+  src_ = src_u;
 
   return (src_u != NULL
-       && is_user_vaddr (src_u)
-       && pagedir_get_page (tc->pagedir, src_u) != NULL
-       && is_user_vaddr (src_u + size)
-       && pagedir_get_page (tc->pagedir, src_u + size) != NULL);
+       && is_user_vaddr (src_)
+       && pagedir_get_page (tc->pagedir, src_) != NULL
+       && is_user_vaddr (src_ + size)
+       && pagedir_get_page (tc->pagedir, src_ + size) != NULL);
 }
 
 
@@ -145,7 +145,8 @@ copy_into_kernel (void * dst_k, const void * src_u, size_t size)
 
   src_ = pagedir_get_page (thread_current ()->pagedir, src_u);
 
-  *dst_ = *src_;
+  for (; size > 0; size--, dst_++, src_++)
+    *dst_ = *src_;
 }
 
 static int syscall_halt (void)
@@ -323,9 +324,10 @@ static int syscall_write (int fd, const void *buffer, unsigned size)
   {
     amt_to_write = min (size, BUFF_MAX);
 
+
     if (fd == STDOUT_FILENO)
     {
-      putbuf ((const char *) buf, amt_to_write);
+      putbuf ((const char*) buf, amt_to_write);
       partial_written_bytes = amt_to_write;
     }
     else

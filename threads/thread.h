@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -81,6 +82,21 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+
+/* Child node inspired by 
+https://github.com/yuan901202/pintos_3/blob/master/src/threads/thread.h 
+*/
+struct child
+  {
+    struct list_elem elem;
+    uint32_t exit_status;
+    tid_t tid;
+    struct semaphore dead;  /* waits for dead */
+
+    struct lock lock;
+    uint8_t ref_count;
+  };
+
 struct thread
   {
     /* Owned by thread.c. */
@@ -101,17 +117,19 @@ struct thread
     struct list_elem donationelem;	/* List element in a donation list. */
     struct lock *waiting_on;
 
-    uint32_t current_desc;               /* Current descriptor count */
+    uint32_t current_desc;              /* Current descriptor count */
     struct list file_decs;              /* List of all file descriptors */
+
+    struct list children;
+    struct child * child_node;
 
   #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    uint32_t exit_status;
   #endif
 
     /* Owned by thread.c. */
-       unsigned magic;                	/* Detects stack overflow. */
+    unsigned magic;                	    /* Detects stack overflow. */
   };
 
 struct file_descriptor

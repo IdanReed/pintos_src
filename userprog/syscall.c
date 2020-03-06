@@ -156,7 +156,7 @@ static int syscall_halt (void)
 
 static int syscall_exit (int status)
 {
-  thread_current()->exit_status = status;
+  thread_current()->child_node->exit_status = status;
   thread_exit();
 }
 

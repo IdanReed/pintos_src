@@ -14,12 +14,40 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
+#include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void free_child (struct child * child_node);
+
+struct process_info
+{
+  const char * file_name;
+  struct child * child_node;
+  bool success;
+  struct semaphore started;
+};
+
+/* Ref counting inspired by 
+https://github.com/yuan901202/pintos_3/blob/master/src/threads/thread.h 
+*/
+static void free_child (struct child * child_node)
+{
+  int new_count;
+
+  lock_acquire (&child_node->lock);
+  new_count = --child_node->ref_count; 
+  lock_release (&child_node->lock);
+
+  if (new_count == 0)
+  {
+    /* We have no more references so its safe to free the memory */
+    free (child_node);
+  }
+}
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -28,8 +56,13 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
+  struct process_info process_info;
   char *fn_copy;
   tid_t tid;
+
+  sema_init (&process_info.started, 0);
+  process_info.success = false;
+
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -38,19 +71,34 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  process_info.file_name = fn_copy;
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, &process_info);
+  if (tid == TID_ERROR){
     palloc_free_page (fn_copy); 
+    return TID_ERROR;
+  }
+
+  /* Wait for process_start to run */
+  sema_down (&process_info.started);
+
+  /* Exit if it didn't create successfully */
+  if (!process_info.success)
+    return TID_ERROR;
+
+  /* Add as child process */
+  list_push_back (&thread_current ()->children, &process_info.child_node->elem);
+
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void * process_info_)
 {
-  char *file_name = file_name_;
+  struct process_info *process_info = process_info_;
   struct intr_frame if_;
   bool success;
 
@@ -59,10 +107,30 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (process_info->file_name, &if_.eip, &if_.esp);
+
+  /* Create the child node so that it can be added to the parent */
+  if (success)
+  {
+    process_info->child_node = malloc(sizeof *process_info->child_node); 
+    thread_current ()->child_node = process_info->child_node;
+    success = process_info->child_node != NULL;
+  }
+
+  /* Setup the child node after sucessful allocation */
+  if(success)
+  {
+    process_info->child_node->tid = thread_current ()->tid;
+    process_info->child_node->exit_status = -1;
+    process_info->child_node->ref_count = 2;
+    sema_init (&process_info->child_node->dead, 0);
+    lock_init (&process_info->child_node->lock);
+  }
+
+  process_info->success = success;
+  sema_up (&process_info->started);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
 
@@ -86,9 +154,41 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  while(1);
+  struct thread * tc;
+  struct list_elem * e;
+  struct child * child_node;
+  int exit_status;
+
+  tc = thread_current ();
+  exit_status = -1;
+
+  for (e = list_begin (&tc->children); 
+       e != list_end (&tc->children); 
+       e = list_next(e))
+  {
+    child_node = list_entry (e, struct child, elem);
+
+    if (child_node->tid == child_tid)
+    {
+      /* Wait for child to die. (oof that's a bit morbid) */
+      sema_down (&child_node->dead); 
+
+      /* Use our child's exit status as return value */
+      exit_status = child_node->exit_status;
+
+      /* Remove child from children list */
+      list_remove (e);
+
+      /* Free the child */
+      free_child (child_node);
+
+      break;
+    }
+  }
+
+  return exit_status;
 }
 
 /* Free the current process's resources. */
@@ -97,6 +197,27 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  struct list_elem * e;
+
+  if (cur->child_node != NULL)
+  {
+    printf ("%s: exit(%d)\n", cur->name, cur->child_node->exit_status);
+
+    /* Notify our parent of our death */
+    sema_up (&cur->child_node->dead);
+
+    /* Lose a reference and potentially deallocate */
+    free_child (cur->child_node);
+  }
+
+  /* Free up our references to children */
+  for (e = list_begin (&cur->children); 
+       e != list_end (&cur->children); 
+       e = list_remove(e))
+  {
+    /* Remove our reference to the child */
+    free_child (list_entry (e, struct child, elem));
+  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

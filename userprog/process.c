@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include <list.h>
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -19,17 +20,34 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
-static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static void free_child (struct child * child_node);
-
 struct process_info
 {
-  const char * file_name;
+  char * file_name;
   struct child * child_node;
   bool success;
   struct semaphore started;
+  
+  const char * usr_args_copy;
+  struct list parsed_args;
 };
+
+struct usr_arg_info
+{
+  struct list_elem elem;
+  char * arg;
+  int size;
+  char * arg_vaddr;
+};
+
+static thread_func start_process NO_RETURN;
+static bool load (struct process_info *, void (**eip) (void), void **esp);
+static void free_child (struct child * child_node);
+
+
+static void debug_print_args (struct process_info * p_info);
+static bool parse_args (char * usr_args, struct process_info * p_info);
+static void free_arg_mem (struct process_info *);
+
 
 /* Ref counting inspired by 
 https://github.com/yuan901202/pintos_3/blob/master/src/threads/thread.h 
@@ -49,46 +67,122 @@ static void free_child (struct child * child_node)
   }
 }
 
+static void
+debug_print_args (struct process_info * p_info)
+{
+  struct list_elem * e;
+  struct usr_arg_info * u_arg;
+
+  printf("User Args: \n");
+  for (	e = list_begin (&p_info->parsed_args); 
+	e != list_end (&p_info->parsed_args); 
+	e = list_next (e)
+      )
+    {
+      u_arg = list_entry (e, struct usr_arg_info, elem);
+      printf("\t%.*s\n", u_arg->size, u_arg->arg); 
+    }
+}
+
+static bool
+parse_args (char * usr_args, struct process_info * p_info)
+{
+  int cur_index;
+  char cur;  
+  int arg_start;
+
+  struct usr_arg_info * prev_arg;
+  struct usr_arg_info * file_arg;
+
+  /* Save out usr args to page */
+  p_info->usr_args_copy = palloc_get_page (0);  
+  if (p_info->usr_args_copy == NULL)
+    return false;
+
+  strlcpy (p_info->usr_args_copy, usr_args, PGSIZE);
+
+  prev_arg = malloc(sizeof(struct usr_arg_info)); 
+  prev_arg->arg = usr_args;
+  
+  list_init (&p_info->parsed_args);
+  list_push_back (&p_info->parsed_args, &prev_arg->elem); 
+
+  arg_start = 0;
+  cur_index = 0;
+  while (cur_index < PGSIZE) {
+    cur = usr_args[cur_index];
+    
+    if (cur == '\0'){
+      prev_arg->size = cur_index - arg_start; 
+      break;
+    }
+    else if (cur == ' '){
+      prev_arg->size = cur_index - arg_start; 
+      prev_arg = malloc(sizeof(struct usr_arg_info)); 
+      list_push_back (&p_info->parsed_args, &prev_arg->elem); 
+      
+      prev_arg->arg = &usr_args[cur_index + 1];
+      cur_index++;
+      arg_start = cur_index;
+    }
+    cur_index++;
+  }
+
+  file_arg = list_entry (
+      list_pop_front (&p_info->parsed_args), 
+      struct usr_arg_info, 
+      elem
+    );
+  
+  p_info->file_name = malloc (sizeof (file_arg->size+1));
+  memcpy (p_info->file_name, file_arg->arg, file_arg->size);
+  p_info->file_name[file_arg->size] = '\0'; 
+  
+  debug_print_args (p_info);
+  return true;
+}
+
+static void
+free_arg_mem (struct process_info * p_info)
+{
+
+}
+
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *usr_args) 
 {
-  struct process_info process_info;
-  char *fn_copy;
+  struct process_info * p_info;
   tid_t tid;
 
-  sema_init (&process_info.started, 0);
-  process_info.success = false;
-
-
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
-    return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
-
-  process_info.file_name = fn_copy;
+  p_info = malloc (sizeof (struct process_info));
+  
+  sema_init (&p_info->started, 0);
+  p_info->success = false;
+  
+  parse_args (usr_args, p_info);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, &process_info);
+  tid = thread_create (p_info->file_name, PRI_DEFAULT, start_process, p_info);
+
   if (tid == TID_ERROR){
-    palloc_free_page (fn_copy); 
+    free_arg_mem (p_info);
     return TID_ERROR;
   }
 
   /* Wait for process_start to run */
-  sema_down (&process_info.started);
+  sema_down (&p_info->started);
 
   /* Exit if it didn't create successfully */
-  if (!process_info.success)
+  if (p_info->success)
     return TID_ERROR;
 
   /* Add as child process */
-  list_push_back (&thread_current ()->children, &process_info.child_node->elem);
+  list_push_back (&thread_current ()->children, &p_info->child_node->elem);
 
   return tid;
 }
@@ -107,7 +201,7 @@ start_process (void * process_info_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (process_info->file_name, &if_.eip, &if_.esp);
+  success = load (process_info, &if_.eip, &if_.esp);
 
   /* Create the child node so that it can be added to the parent */
   if (success)
@@ -116,7 +210,7 @@ start_process (void * process_info_)
     thread_current ()->child_node = process_info->child_node;
     success = process_info->child_node != NULL;
   }
-
+  
   /* Setup the child node after sucessful allocation */
   if(success)
   {
@@ -321,13 +415,77 @@ static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
+void stack_usr_args (struct process_info * p_info, void (**esp));
+
+void 
+stack_usr_args (struct process_info * p_info, void (**esp))
+{
+  struct thread * t;
+    
+  struct list_elem * e;
+  struct usr_arg_info * u_arg;
+  
+  /* Push strings last to first and store vaddrs */
+  for (	e = list_back (&p_info->parsed_args); 
+	e != list_head (&p_info->parsed_args); 
+	e = list_prev (e)
+      )
+  {
+    u_arg = list_entry (e, struct usr_arg_info, elem);
+    *esp -= u_arg->size + 1;
+    memcpy (*esp, u_arg->arg, u_arg->size);
+    char nul = '\-1';
+    memcpy(*esp - 1, &nul, 0);
+
+    //(*esp) [u_arg->size+1] = '\0';
+    u_arg->arg_vaddr = *esp; 
+  }
+
+  while ((int)*esp%4 != 0) 
+  {
+    *esp -= 1;
+    char czero = 0;
+    memcpy(*esp, &czero, 1);
+  }
+
+  int zero = 0;
+  *esp-=sizeof(int);
+  memcpy(*esp, &zero, sizeof(int));
+
+ 
+  if (!list_empty (&p_info->parsed_args))
+  {
+    for ( e = list_back (&p_info->parsed_args); 
+	  e != list_head (&p_info->parsed_args); 
+	  e = list_prev (e)
+	)
+    {
+      u_arg = list_entry (e, struct usr_arg_info, elem);
+      *esp -= sizeof(int);
+      memcpy(*esp, &u_arg->arg_vaddr, sizeof(int));
+    }
+  }
+
+  int pt = *esp;
+  *esp-=sizeof(int);
+  memcpy(*esp,&pt,sizeof(int));
+
+  int argc = list_size (&p_info->parsed_args);
+  *esp-=sizeof(int);
+  memcpy(*esp,&argc,sizeof(int));
+
+  *esp-=sizeof(int);
+  memcpy(*esp,&zero,sizeof(int));
+  
+  //hex_dump(*esp,*esp,PHYS_BASE-(*esp),true); 
+}
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (struct process_info * p_info, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -343,11 +501,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (p_info->file_name);
   if (file == NULL) 
     {
-      printf ("load: %s: open failed\n", file_name);
-      goto done; 
+      printf ("load: %s: open failed\n", p_info->file_name);
+      goto done;
     }
 
   /* Read and verify executable header. */
@@ -359,7 +517,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
-      printf ("load: %s: error loading executable\n", file_name);
+      printf ("load: %s: error loading executable\n", p_info->file_name);
       goto done; 
     }
 
@@ -426,6 +584,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (!setup_stack (esp))
     goto done;
 
+  stack_usr_args (p_info, esp);
+
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
@@ -436,7 +596,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file_close (file);
   return success;
 }
-
+
 /* load() helpers. */
 
 static bool install_page (void *upage, void *kpage, bool writable);

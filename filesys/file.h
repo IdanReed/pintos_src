@@ -2,7 +2,7 @@
 #define FILESYS_FILE_H
 
 #include "filesys/off_t.h"
-
+#define MAX_FILENAME_LEN 14
 struct inode;
 
 /* Opening and closing files. */

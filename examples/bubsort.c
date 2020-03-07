@@ -18,6 +18,7 @@ main (void)
   static int array[SORT_SIZE];
 
   int i, j, tmp;
+  printf("BUBSORT CALLED\n");
 
   /* First initialize the array in descending order. */
   for (i = 0; i < SORT_SIZE; i++)
@@ -32,6 +33,7 @@ main (void)
 	  array[j] = array[j + 1];
 	  array[j + 1] = tmp;
 	}
+  printf("BUB CALLED 2\n");
 
   printf ("sort exiting with code %d\n", array[0]);
   return array[0];

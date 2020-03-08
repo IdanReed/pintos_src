@@ -311,11 +311,11 @@ elem_priority_comparison (
 void 
 thread_add_donator(struct thread *t)
 {
-  list_insert_ordered( 
+  /*list_insert_ordered( 
     &t->donations, 
     &thread_current()->donationelem, 
     (list_less_func*) &donate_priority_comparison,
-    NULL);
+    NULL);*/
 }
 
 void 
@@ -325,6 +325,9 @@ thread_donate_priority(void)
      implementation of priority donation.
      https://github.com/yuan901202/pintos_2/blob/master/src/threads/thread.c 
      */
+
+  /* Exit early to not cause issues with new project because it isnt needed */
+  return;
 
   struct thread * tc;
   struct lock * lock_current;
@@ -639,7 +642,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   list_init (&t->donations);
   list_init (&t->children);
+  list_init (&t->file_decs);
   t->waiting_on = NULL;
+  t->current_desc = 2;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

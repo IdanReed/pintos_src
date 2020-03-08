@@ -165,6 +165,9 @@ process_execute (const char *usr_args)
 
   p_info = malloc (sizeof (struct process_info));
 
+  if (p_info == NULL)
+    return TID_ERROR;
+
   sema_init (&p_info->started, 0);
   p_info->success = false;
 
@@ -182,7 +185,7 @@ process_execute (const char *usr_args)
   sema_down (&p_info->started);
 
   /* Exit if it didn't create successfully */
-  if (p_info->success)
+  if (!p_info->success)
     return TID_ERROR;
 
   /* Add as child process */

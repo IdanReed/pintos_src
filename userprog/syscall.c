@@ -132,8 +132,16 @@ is_valid_mem_area (const void * src_u, size_t size)
 static bool
 is_valid_str (const char * str)
 {
+  if (str == NULL)
+    return false;
+
+  if (!is_valid_mem_area (str, 0))
+    return false;
+
   while (*str != '\0')
   {
+    /* Check one byte ahead */
+    str++;
     if (!is_valid_mem_area (str, 0))
     {
       return false;
@@ -224,6 +232,9 @@ static int syscall_open (const char *file)
   struct file * f;
   struct file_descriptor * fd;
   struct thread * tc;
+  int handle;
+
+  handle = -1;
 
   if (!is_valid_str (file))
     thread_exit ();
@@ -234,25 +245,23 @@ static int syscall_open (const char *file)
   f = filesys_open(file);
   lock_release (&filesys_lock);
 
-  if (!f)
+  if (f != NULL)
   {
-    thread_exit ();
+    /* Make new file descriptor */
+    fd = malloc (sizeof(struct file_descriptor)); 
+    
+    if (!fd)
+    {
+      return ERROR;
+    } 
+
+    fd->file = f;
+    fd->handle = handle = tc->current_desc;
+    tc->current_desc++;
+    list_push_back (&tc->file_decs, &fd->elem); 
   }
 
-  /* Make new file descriptor */
-  fd = malloc (sizeof(struct file_descriptor)); 
-  
-  if (!fd)
-  {
-    return ERROR;
-  } 
-
-  fd->file = f;
-  fd->handle = tc->current_desc;
-  tc->current_desc++;
-  list_push_back (&tc->file_decs, &fd->elem); 
-
-  return fd->handle;
+  return handle;
 }
 
 static int syscall_filesize (int fd)

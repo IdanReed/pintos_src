@@ -71,10 +71,6 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      /* Donate priority to all the threads we're waiting on */
-      thread_donate_priority();
-
-      /* Add current thread to the waiters list */
       list_push_back(&sema->waiters, &thread_current ()->elem);
       thread_block ();
     }
@@ -122,23 +118,10 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters))
   {
-    /* Need to sort the waiters list every time because setting the priority
-       could make this list unordered. Need to unblock the highest priority
-       thread first. */
-    list_sort (
-	&sema->waiters, 
-	(list_less_func*) &elem_priority_comparison, 
-	NULL
-    );
-
-    /* Unblock the last waiter (highest priority) */
-    thread_unblock (list_entry (list_pop_back (&sema->waiters),
+    thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
   }
   sema->value++;
-
-  /* yield thread if necessary (e.g. unblocked thread has higher priority) */
-  thread_yield_if_not_highest ();
 
   intr_set_level (old_level);
 

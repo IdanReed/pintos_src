@@ -645,6 +645,7 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->file_decs);
   t->waiting_on = NULL;
   t->current_desc = 2;
+  t->exe_file = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

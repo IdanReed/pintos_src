@@ -312,6 +312,8 @@ process_exit (void)
   uint32_t *pd;
   struct list_elem * e;
 
+  file_close (cur->exe_file);
+
   if (cur->child_node != NULL)
   {
     printf ("%s: exit(%d)\n", cur->name, cur->child_node->exit_status);
@@ -530,12 +532,14 @@ load (struct process_info * p_info, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  file = filesys_open (p_info->file_name);
+  t->exe_file = file = filesys_open (p_info->file_name);
   if (file == NULL)
     {
       printf ("load: %s: open failed\n", p_info->file_name);
       goto done;
     }
+
+  file_deny_write (t->exe_file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -622,7 +626,6 @@ load (struct process_info * p_info, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 

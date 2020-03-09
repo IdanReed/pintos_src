@@ -120,8 +120,9 @@ struct thread
     uint32_t current_desc;              /* Current descriptor count */
     struct list file_decs;              /* List of all file descriptors */
 
-    struct list children;
-    struct child * child_node;
+    struct list children;               /* List of child processes */
+    struct child * child_node;          /* Wait status elements */
+    struct file * exe_file;             /* The current executable file to deny writes */
 
   #ifdef USERPROG
     /* Owned by userprog/process.c. */

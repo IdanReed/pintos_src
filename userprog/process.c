@@ -143,17 +143,17 @@ parse_args (struct process_info * p_info)
 static void
 free_proccess_info_mem (struct process_info * p_info)
 {
-  free (p_info->file_name);
-  free (p_info->usr_args);
+  // free (p_info->file_name);
+  // free (p_info->usr_args);
 
-  while (!list_empty (&p_info->parsed_args))
-    {
-      free (
-        list_entry (list_pop_front (&p_info->parsed_args),
-        struct usr_arg_info,
-        elem)
-      );
-    }
+  // while (!list_empty (&p_info->parsed_args))
+  //   {
+  //     free (
+  //       list_entry (list_pop_front (&p_info->parsed_args),
+  //       struct usr_arg_info,
+  //       elem)
+  //     );
+  //   }
 
 }
 

@@ -1,5 +1,5 @@
 		           +--------------------------+
-				   |         CIS 520          |
+				       |         CIS 520          |
 		           | PROJECT 2: USER PROGRAMS |
 		           |     DESIGN DOCUMENT      |
 		           +--------------------------+
@@ -136,6 +136,7 @@ struct thread
 
     uint32_t current_desc;              /* Current descriptor count */
     struct list file_decs;              /* List of all file descriptors */
+    struct file * exe_file;             /* The current executable file. Keep open to deny writing to it */
   ...
 
   }
@@ -180,12 +181,14 @@ and return valid or we hit an invalid memory address and return invalid.
 >> (e.g. calls to pagedir_get_page()) that might result?  What about
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
+
 Our memory area checker calls pagedir_get_page twice, once for starting
 and ending portions and therefore inspection would only occur twice. For
 strings however, its called for each byte in the string. This is because we
 don't know the end of the string and need to go until we find it. This could
 surely be improved by just passing a size along with the string. Or using
-a better way of finding string length.
+a better way of finding string length. For 2 bytes of data, there are still
+two calls to the pagedir_get_page function (one for start, one for end).
 
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
@@ -204,6 +207,27 @@ a better way of finding string length.
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
 
+At the beginning, we copy the user args into the kernel. If this fails,
+we instantly exit the syscall citing an error. After that, in each syscall,
+we validate the user given memory first and then proceed with the implementation.
+We never grab any locks before the checks take place. This way we don't need to keep
+release the lock if an early exit occurs. This keeps the error handling mostly at the
+top of each system call and makes the implemenation cleaner.
+So essentially our strategy was to error check everything at the beginning and then
+do the bulk of the system call. No intermixed error handling.
+
+An example:
+At the top of syscall_write, we check if the user memory area is valid:
+
+  if (!is_valid_mem_area (buf, size))
+  {
+    /* Gave us a bad address */
+    thread_exit();
+  }
+
+and exit if its not. Right after that the filesystem lock is acquired. This ensures
+that we don't accidentally exit without releasing the lock.
+
 
 ---- SYNCHRONIZATION ----
 
@@ -212,6 +236,13 @@ a better way of finding string length.
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
 
+We have a process_info struct that is created in the parent and passed to the child process. 
+This process_info struct has a semaphore which signlas once the 
+child process has been created. This allows
+the parent to wait on the semaphore, and the child to release the semaphore ensuring that
+we wait untill the child process has been successfully/unsucessfully loaded. We also 
+store a "success" field in the process info struct so that we can know if the loading failed. 
+
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
 >> calls wait(C) before C exits?  After C exits?  How do you ensure
@@ -219,16 +250,37 @@ a better way of finding string length.
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
 
+The synchronization is dealt with through a "dead" semaphore. When the child exits, it 
+signals the dead semaphore. If the parent were to exit first, it waits on the child's dead
+semaphore. If the child exited first, then the semaphore would be signaled and the parent 
+would be able to just pass through on exit. The child_node (which stores the 'dead' semaphore) has a reference count that starts at 2. Once the child exits, the count decreases by one. Similarly with the parent. Once the count hits 0, the memory is freed. This ensures that when
+both processes are done using it, the resources are deallocated. This works no matter who
+exits first because its checked when either process exits.
+
 ---- RATIONALE ----
 
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
 
+It seemed like the two most critical points of memory are the two ends of the buffer. So
+we decided to check either side so that we didn't have to check every byte. It also made
+the syscall functions much simpler than trying to check it during the processing of the data.
+
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
 
+Advantages: Its simple. Its just a list of file handles and file pointers. To find a file,
+we just need to search the list.
+
+Disadvantages: If we used an absurd amount of files, we would eventually run out of unique file
+handles. This would cause big issues. A UUID would maybe be better in this case but way less
+simple. Also finding a file is linear time which could be improved with something like a 
+hash table.
+
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
+
+We didn't change it. 
 
 			   SURVEY QUESTIONS
 			   ================
@@ -242,12 +294,19 @@ the quarter.
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
 
+I think it was a pretty good difficulty. It did take a decently long time, however.
+Maybe a few tips on where to start with it might be helpful. The docs give some but
+they don't really point you in much of a direction.
+
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
+Syscalls for sure gave me a large insight into OS design. I found it very valuable.
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
+Not sure, maybe just a few starting point hints or ideas of how to solve a problem 
+would be good.
 
 >> Do you have any suggestions for the TAs to more effectively assist
 >> students, either for future quarters or the remaining projects?

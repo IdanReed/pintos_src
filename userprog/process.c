@@ -31,6 +31,7 @@ struct process_info
   struct list parsed_args;
 };
 
+
 struct usr_arg_info
 {
   struct list_elem elem;
@@ -46,7 +47,7 @@ static void free_child (struct child * child_node);
 
 static void debug_print_args (struct process_info * p_info);
 static bool parse_args (struct process_info * p_info);
-static void free_arg_mem (struct process_info *);
+static void free_proccess_info_mem (struct process_info *);
 
 
 /* Ref counting inspired by
@@ -140,8 +141,19 @@ parse_args (struct process_info * p_info)
 }
 
 static void
-free_arg_mem (struct process_info * p_info)
+free_proccess_info_mem (struct process_info * p_info)
 {
+  free (p_info->file_name);
+  free (p_info->usr_args);
+
+  while (!list_empty (&p_info->parsed_args))
+    {
+      free (
+        list_entry (list_pop_front (&p_info->parsed_args),
+        struct usr_arg_info,
+        elem)
+      );
+    }
 
 }
 
@@ -175,7 +187,6 @@ process_execute (const char *usr_args)
   tid = thread_create (p_info->file_name, PRI_DEFAULT, start_process, p_info);
 
   if (tid == TID_ERROR){
-    free_arg_mem (p_info);
     return TID_ERROR;
   }
 
@@ -425,6 +436,8 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           bool writable);
 void stack_usr_args (struct process_info * p_info, void (**esp));
 
+int stack_count = 0;
+
 void
 stack_usr_args (struct process_info * p_info, void (**esp))
 {
@@ -491,6 +504,8 @@ stack_usr_args (struct process_info * p_info, void (**esp))
   /* Return addres */
   *esp-=sizeof(int);
   memcpy(*esp,&zero,sizeof(int));
+
+  free_proccess_info_mem (p_info);
 
 }
 

@@ -27,7 +27,7 @@ struct process_info
   bool success;
   struct semaphore started;
 
-  const char * usr_args_copy;
+  const char * usr_args;
   struct list parsed_args;
 };
 
@@ -45,7 +45,7 @@ static void free_child (struct child * child_node);
 
 
 static void debug_print_args (struct process_info * p_info);
-static bool parse_args (char * usr_args, struct process_info * p_info);
+static bool parse_args (struct process_info * p_info);
 static void free_arg_mem (struct process_info *);
 
 
@@ -85,7 +85,7 @@ debug_print_args (struct process_info * p_info)
 }
 
 static bool
-parse_args (char * usr_args, struct process_info * p_info)
+parse_args (struct process_info * p_info)
 {
   int cur_index;
   char cur;
@@ -94,15 +94,8 @@ parse_args (char * usr_args, struct process_info * p_info)
   struct usr_arg_info * prev_arg;
   struct usr_arg_info * file_arg;
 
-  /* Save out usr args to page */
-  p_info->usr_args_copy = palloc_get_page (0);
-  if (p_info->usr_args_copy == NULL)
-    return false;
-
-  strlcpy (p_info->usr_args_copy, usr_args, PGSIZE);
-
   prev_arg = malloc(sizeof(struct usr_arg_info));
-  prev_arg->arg = usr_args;
+  prev_arg->arg = p_info->usr_args;
 
   list_init (&p_info->parsed_args);
   list_push_back (&p_info->parsed_args, &prev_arg->elem);
@@ -110,7 +103,7 @@ parse_args (char * usr_args, struct process_info * p_info)
   arg_start = 0;
   cur_index = 0;
   while (cur_index < PGSIZE) {
-    cur = usr_args[cur_index];
+    cur = p_info->usr_args[cur_index];
 
     if (cur == '\0'){
       prev_arg->size = cur_index - arg_start;
@@ -123,10 +116,10 @@ parse_args (char * usr_args, struct process_info * p_info)
 
       while (cur == ' ') {
         cur_index++;
-        cur = usr_args[cur_index];
+        cur = p_info->usr_args[cur_index];
       }
 
-      prev_arg->arg = &usr_args[cur_index];
+      prev_arg->arg = &p_info->usr_args[cur_index];
       arg_start = cur_index;
     }
     cur_index++;
@@ -165,13 +158,18 @@ process_execute (const char *usr_args)
 
   p_info = malloc (sizeof (struct process_info));
 
-  if (p_info == NULL)
-    return TID_ERROR;
+  /* Save out usr args to page */
+  p_info->usr_args = palloc_get_page (0);
+
+  if (p_info->usr_args == NULL)
+    return false;
+  strlcpy (p_info->usr_args, usr_args, PGSIZE);
+
+  parse_args (p_info);
 
   sema_init (&p_info->started, 0);
   p_info->success = false;
 
-  parse_args (usr_args, p_info);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (p_info->file_name, PRI_DEFAULT, start_process, p_info);
@@ -187,6 +185,9 @@ process_execute (const char *usr_args)
   /* Exit if it didn't create successfully */
   if (!p_info->success)
     return TID_ERROR;
+
+  //debug_print_args (p_info);
+
 
   /* Add as child process */
   list_push_back (&thread_current ()->children, &p_info->child_node->elem);

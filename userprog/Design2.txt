@@ -29,19 +29,67 @@ Idan Reed
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+Two structs in process:
+
+  struct process_info
+  {
+    char * file_name;
+    struct child * child_node;
+    bool success;
+    struct semaphore started;
+
+    const char * usr_args_copy;
+    struct list parsed_args;
+  };
+
+  struct usr_arg_info
+  {
+    struct list_elem elem;
+    char * arg;
+    int size;
+    char * arg_vaddr;
+  };
+
+These structs are create in process_execute and passed through thread create
+into start_process. This is so user arguments get processed all in one place but
+then can be push on the stack later.
+
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
+Argument passing is implemented in process_execute which parses the args and
+passes them through thread_create. Then when the executable has been
+successfully loaded, in load(), stack_usr_args() is called with the process_info
+struct and the stack pointer.
+
+The string pointers are pushed onto the stack in reverse order so argv[0] will
+point to the first string and so on.
+
+To prevent overflowing the input size is restricted to a page. There could be a
+fix like allocating extra pages for arguments but it would likely increase
+complexity a lot for not much gain.
+
+
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
 
+This is so the argument passing could be interupted but still work correctly.
+
 >> A4: In Pintos, the kernel separates commands into an executable name
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
+
+By not requiring the kernel to do this it can be simpler which makes this could
+mean less bugs.
+
+Also the shell could do some error checking like filename and arg length or
+making sure an exceutable exists.
+
 
 			     SYSTEM CALLS
 			     ============
@@ -54,14 +102,14 @@ Idan Reed
 
 typedef int syscall_fn (uint32_t, uint32_t, uint32_t);
 
-- This is the function type that is stored in the system call table. 
+- This is the function type that is stored in the system call table.
 
 static struct lock filesys_lock;
 
 - This is the filesystem lock that makes sure only one process is accessing
 the file system at a time.
 
-struct syscall 
+struct syscall
 {
   int arg_count;           /* Number of args syscall is expecting. Allows for correct number of bytes to be copied when calling */
   syscall_fn * function;   /* Syscall function pointer */
@@ -80,8 +128,8 @@ struct file_descriptor
 - The file descriptor struct that stores a file and its handle. Has list_elem so it
 can be stored in files list.
 
-struct thread 
-  { 
+struct thread
+  {
   ...
     struct list children;               /* List of all child processes that this thread owns */
     struct child * child_node;          /* The struct that stores things like exit status and all the constructs used for process wait synch. */
@@ -110,8 +158,8 @@ struct child
 >> single process?
 
 Each thread has a running count of file descriptors. Each time a file is opened
-that count is increased and given to the new file. The file descriptors are unique 
-to each process. So multiple threads can have files open with the same descriptors. This 
+that count is increased and given to the new file. The file descriptors are unique
+to each process. So multiple threads can have files open with the same descriptors. This
 shouldn't cause a problem because one of the requirements was that threads can only access
 files that they've opened and don't need to touch any other threads' file descriptors.
 
@@ -120,9 +168,9 @@ files that they've opened and don't need to touch any other threads' file descri
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
 
-The user arguements are first checked to make sure they're valid. Then 
+The user arguements are first checked to make sure they're valid. Then
 they are copied into the kernel location. For larger buffers, the starting
-byte and ending byte are checked for validity and then used. For strings, 
+byte and ending byte are checked for validity and then used. For strings,
 we check each byte until a null terminator is found. Either we find a null
 and return valid or we hit an invalid memory address and return invalid.
 

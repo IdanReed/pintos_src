@@ -37,17 +37,17 @@ static int syscall_tell (int fd);
 static int syscall_close (int fd);
 
 typedef int syscall_fn (uint32_t, uint32_t, uint32_t);
-static struct file_descriptor * lookup_file (uint32_t fd); 
+static struct file_descriptor * lookup_file (uint32_t fd);
 
 static struct lock filesys_lock;
 
-struct syscall 
+struct syscall
 {
   int arg_count;
   syscall_fn * function;
 };
 
-static const struct syscall call_table[] = 
+static const struct syscall call_table[] =
 {
   {0, (syscall_fn*) syscall_halt},
   {1, (syscall_fn*) syscall_exit},
@@ -69,7 +69,7 @@ _Static_assert(sizeof(call_table) / sizeof(struct syscall) == SYS_CALL_COUNT,
     "call_table does not match syscall enum amount");
 
 void
-syscall_init (void) 
+syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 
@@ -77,7 +77,7 @@ syscall_init (void)
 }
 
 static void
-syscall_handler (struct intr_frame *f) 
+syscall_handler (struct intr_frame *f)
 {
   uint8_t call_number;
   uint32_t args[SUPPORTED_ARGS];
@@ -92,7 +92,7 @@ syscall_handler (struct intr_frame *f)
     printf("invalid syscall!\n");
     thread_exit();
   }
- 
+
   /* Get the corresponding syscall */
   call = call_table[call_number];
 
@@ -107,13 +107,13 @@ syscall_handler (struct intr_frame *f)
   f->eax = call.function(args[0], args[1], args[2]);
 }
 
-static int 
+static int
 min (int a, int b)
 {
   return a < b ? a : b;
 }
 
-static bool 
+static bool
 is_valid_mem_area (const void * src_u, size_t size)
 {
   struct thread * tc;
@@ -150,7 +150,7 @@ is_valid_str (const char * str)
   return true;
 }
 
-static void 
+static void
 copy_into_kernel (void * dst_k, const void * src_u, size_t size)
 {
   uint8_t * dst_;
@@ -169,6 +169,7 @@ copy_into_kernel (void * dst_k, const void * src_u, size_t size)
     *dst_ = *src_;
 }
 
+
 static int syscall_halt (void)
 {
   shutdown_power_off ();
@@ -184,9 +185,11 @@ static int syscall_exec (const char *cmd_line)
 {
   tid_t tid;
 
-  if (!is_valid_str (cmd_line))
+  if (!is_valid_str (cmd_line)) {
     thread_exit ();
-  
+  }
+
+
   lock_acquire (&filesys_lock);
   tid = process_execute (cmd_line);
   lock_release (&filesys_lock);
@@ -205,7 +208,7 @@ static int syscall_create (const char *file, unsigned initial_size)
 
   if (!is_valid_str (file))
     thread_exit ();
-  
+
   lock_acquire (&filesys_lock);
   res = filesys_create (file, initial_size);
   lock_release (&filesys_lock);
@@ -248,17 +251,17 @@ static int syscall_open (const char *file)
   if (f != NULL)
   {
     /* Make new file descriptor */
-    fd = malloc (sizeof(struct file_descriptor)); 
-    
+    fd = malloc (sizeof(struct file_descriptor));
+
     if (!fd)
     {
       return ERROR;
-    } 
+    }
 
     fd->file = f;
     fd->handle = handle = tc->current_desc;
     tc->current_desc++;
-    list_push_back (&tc->file_decs, &fd->elem); 
+    list_push_back (&tc->file_decs, &fd->elem);
   }
 
   return handle;
@@ -304,7 +307,7 @@ static int syscall_read (int fd, void *buffer, unsigned size)
       buf++;
     }
   }
-  else 
+  else
   {
     file_to_read = lookup_file (fd)->file;
 
@@ -418,8 +421,8 @@ static int syscall_close (int fd)
   return 0;
 }
 
-static struct file_descriptor * 
-lookup_file (uint32_t fd) 
+static struct file_descriptor *
+lookup_file (uint32_t fd)
 {
   struct thread * tc;
   struct list_elem * e;
@@ -427,11 +430,11 @@ lookup_file (uint32_t fd)
 
   tc = thread_current();
 
-  for (e = list_begin (&tc->file_decs); 
-       e != list_end (&tc->file_decs); 
+  for (e = list_begin (&tc->file_decs);
+       e != list_end (&tc->file_decs);
        e = list_next (e))
   {
-    desc = list_entry (e, struct file_descriptor, elem);  
+    desc = list_entry (e, struct file_descriptor, elem);
     if (desc->handle == fd){
       return desc;
     }
